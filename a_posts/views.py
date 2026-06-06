@@ -91,7 +91,7 @@ def post_page_view(request, pk):
     commentform = CommentCreateForm()
     replyform = ReplyCreateForm()
 
-    
+     
     # if request.htmx:
     #     if 'top' in request.GET:
     #         comments = post.comments.annotate(num_likes=Count('likes')).filter(num_likes__gt=0).order_by('-num_likes')
@@ -112,6 +112,7 @@ def post_page_view(request, pk):
 @login_required 
 def comment_sent(request, pk):
     post = get_object_or_404(Post, id=pk)
+    replyform = ReplyCreateForm()
 
     if request.method == 'POST':
         form = CommentCreateForm(request.POST)
@@ -120,11 +121,17 @@ def comment_sent(request, pk):
             comment.author = request.user
             comment.parent_post = post            
             comment.save()
+
+    context  = {
+    'post':post,
+    'comment': comment,
+    'replyform': replyform
+    }
             
-    return redirect('post', post.id)
+    return render(request, 'snippets/add_comment.html', {context})
 
 
-@login_required
+@login_required 
 def comment_delete_view(request,pk ):
     post =get_object_or_404(Comment, id=pk, author = request.user)
 
@@ -139,7 +146,7 @@ def comment_delete_view(request,pk ):
 @login_required 
 def reply_sent(request, pk):
     comment = get_object_or_404(Comment, id=pk)
-
+    replyform = ReplyCreateForm()
     
     if request.method == 'POST':
         form = ReplyCreateForm(request.POST)
@@ -150,7 +157,13 @@ def reply_sent(request, pk):
             reply.save()
             
 
-    return render('post' , comment.parent_post.id)
+    context = {
+        'reply' : reply,
+        'comment': comment, 
+        'replyform': replyform 
+    }
+
+    return render(request, 'snippets/add_reply.html', context)
 
 
 
@@ -167,15 +180,39 @@ def reply_delete_view(request, pk):
     return render(request, 'a_posts/reply_delete.html', {'reply' : reply})
 
 
-def like_post(request, pk):
-    post = get_object_or_404(Post, id=pk)
-    user_exist = post.likes.filter(username=request.user.username).exists()
 
-    if post.author != request.user:
-        if user_exist:
-            post.likes.remove(request.user)
-        else:
-            post.likes.add(request.user)    
+def like_toggle(model):
+    def inner_func(func):
+        def wrapper(request, *args, **kwargs):
+            post = get_object_or_404(model, id=kwargs.get('pk'))
+            user_exist = post.likes.filter(username=request.user.username).exists()
+            
+            if post.author != request.user:
+                if user_exist:
+                    post.likes.remove(request.user)
+                else:
+                    post.likes.add(request.user)
+                    
+            return func(request, post)
+        return wrapper
+    return inner_func
 
-    return render(request, 'snippets/likes.html', {'post': post})
+
+
+@login_required
+@like_toggle(Post)
+def like_post(request, post):   
+    return render(request, 'snippets/likes.html', {'post' : post })
+
+
+@login_required
+@like_toggle(Comment)
+def like_comment(request, post):   
+    return render(request, 'snippets/likes_comment.html', {'comment' : post })
+
+
+@login_required
+@like_toggle(Reply)
+def like_reply(request, post):   
+    return render(request, 'snippets/likes_reply.html', {'reply' : post })
 
